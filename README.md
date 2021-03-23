@@ -15,3 +15,107 @@
 - 集群和每个节点都会生成一个uuid。
 - 启动的时候会运行raft，选举出leader。
 - 上面的方法只是简单的启动一个etcd服务，但要长期运行的话，还是做成一个服务好一些。下面将以systemd为例，介绍如何建立一个etcd服务。
+
+```shell
+nohup ./etcd &
+
+./etcdctl put key value
+./etcdctl get key
+./etcdctl del key
+
+## 监听某个key
+./etcdctl watch key
+ 
+## 锁   
+# 只有当正常退出且释放锁后，lock命令的退出码是0，否则这个锁会一直被占用直到过期（默认60秒）
+./etcdctl lock mutex
+
+```
+
+## protobuf
+[官方文档](https://www.grpc.io/docs/languages/go/quickstart/)
+```shell 
+go get -u google.golang.org/grpc
+```
+
+1. 下载安装protoc
+    这是protobuf编译器,将.proto文件,转义为protobuf原生数据结构, 是通用编辑器
+   ```
+    https://github.com/protocolbuffers/protobuf/releases
+    or
+    brew install protobuf
+    ```
+    
+
+2. 安装**protpc-gen-go**, 在执行protoc时会调用这个插件, 用于填充，序列化和检索request以及 response消息类型的代码
+   ```
+    go get -u github.com/golang/protobuf/protoc-gen-go
+    ```
+   
+
+3. 安装**protoc-gen-go-grpc**, 生成的客户端和服务器代码
+   ```
+    go get google.golang.org/grpc/cmd/protoc-gen-go-grpc
+    ```
+   
+
+
+## provider
+
+1. 编写proto文件
+[proto3语法](https://developers.google.com/protocol-buffers/docs/proto3)
+```protobuf
+syntax="proto3";
+
+option go_package="pb/";
+
+message ProdRequest{
+  int32 prod_id=1; // 传入商品ID
+}
+message ProdResponse{
+  int32 prod_stock=3; //商品库存
+}
+```
+
+2. 通过proto中间文件生成go代码
+   
+    ```shell
+    cd provider/pb
+    protoc --go_out=.. --go-grpc_out=.. Prod.pb
+    ```
+3. 编写ProdService实现grpc.pb.go中的业务接口 , 编写服务端启动代码
+    ```go
+      func main() {
+            lis, err := net.Listen("tcp", ":5051")
+            if err != nil {
+                log.Fatalf("failed to listen: %v", err)
+            }
+            s := grpc.NewServer()
+            pb.RegisterProdServiceServer(s,&services.ProdService{})
+            if err := s.Serve(lis); err != nil {
+                log.Fatalf("failed to serve: %v", err)
+        }
+    }
+    ```
+
+## consumer
+
+```go
+func main() {
+    s,err:=grpc.Dial(":5051",grpc.WithInsecure())
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer s.Close()
+
+    client:=pb.NewProdServiceClient(s)
+    prodResponse,err:=client.GetProdStock(context.Background(),&pb.ProdRequest{
+        ProdId: 4,
+    })
+    log.Println(prodResponse.GetProdStock())
+}
+```
+
+## 服务注册和发现
+
+### 服务端代码

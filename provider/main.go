@@ -1,15 +1,22 @@
 package main
 
 import (
-	"fmt"
+	"google.golang.org/grpc"
+	"log"
+	"minigrpc/pb"
+	"minigrpc/provider/services"
+	"net"
 )
 
 func main() {
-	s := "sdfsdfsfsdf呵呵"
-	fmt.Println([]byte(s))
-	for i, v := range []rune(s) {
-		fmt.Printf("%d, %c \n", i, v)
 
+	lis, err := net.Listen("tcp", ":5051")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
 	}
-
+	s := grpc.NewServer()
+	pb.RegisterProdServiceServer(s, &services.ProdService{})
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
 }
